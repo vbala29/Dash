@@ -1,4 +1,5 @@
-use rustdns::{Message, Record};
+use rustdns::{Message, Record, Rcode, Resource::A};
+use crate::error::{Result, DnsError};
 
 
 pub fn has_answer(rsp: &Message) -> bool {
@@ -27,5 +28,17 @@ pub fn get_authoritys(rsp : &Message) -> Option<&Vec<Record>> {
         Some(&rsp.authoritys)
     } else {
         None
+    }
+}
+
+pub fn parse_answer_a(rsp : &Message) -> Result<std::net::Ipv4Addr> {
+    if !has_answer(rsp) {
+        Err(DnsError::new(Rcode::ServFail))
+    } else {
+        let answer = rsp.answers.first().unwrap();
+        match answer.resource {
+            A(a) => Ok(a),
+            _ => Err(DnsError::new(Rcode::NXDomain))
+        }
     }
 }

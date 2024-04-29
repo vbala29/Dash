@@ -1,4 +1,4 @@
-use rustdns::{Extension, Message, Rcode, Resource::A};
+use rustdns::{Class, Extension, Message, Rcode, Resource::{A, NS}, Type};
 use std::net::{UdpSocket, Ipv4Addr};
 use std::time::Duration;
 use crate::error::{Result, DnsError};
@@ -16,7 +16,8 @@ pub fn dispatch_query(msg : Message) -> Result<Message> {
     if msg.rd {
         recursive_resolution(msg)
     } else {
-        iterative_resolution(msg)
+        //iterative_resolution(msg)
+        Err(DnsError::new(Rcode::NXDomain))
     }
 }
 
@@ -28,12 +29,23 @@ pub fn resolve_message_query(msg : Message) -> Result<Message> {
     }
 }
 
+/*
 pub fn iterative_resolution(mut msg : Message) -> Result<Message> {
 
 }
+*/
 
-pub fn recursive_resolution(mut msg: Message) -> Result<Message> {
-   let root_server_ip = "198.41.0.4:53";
+pub fn recursive_resolution(msg: Message) -> Result<Message> {
+   let root_server_ip = "198.41.0.4:53".parse::<Ipv4Addr>()?;
+
+   let ref curr_rsp = query_name_server(root_server_ip, &msg)?;
+
+   loop {
+      let (ans_found, &new_rsp) = process_dns_response(curr_rsp)?;
+      curr_rsp = new_rsp;
+      if ans_found {
+          
+   }
  }
 
 pub fn query_name_server(ip : Ipv4Addr, msg : &Message) -> Result<Message> {
@@ -88,7 +100,7 @@ fn process_dns_response(rsp : &Message) -> Result<(bool, Message)> {
     if dnsTools::has_answer(rsp) {
        Ok((true, rsp.clone()))
     } else if let Some(glue) = dnsTools::get_glue(rsp) {
-        let new_msg = Message::default();
+        let mut new_msg = Message::default();
 
         // TODO check the class and ttl for caching and thoroughness and check for only A records
         let glue_record = glue.first().unwrap();
@@ -107,10 +119,29 @@ fn process_dns_response(rsp : &Message) -> Result<(bool, Message)> {
         });
 
         Ok((false, query_name_server(next_nameserver_ip, &new_msg)?))
-    } else if let Some(authority) = dnsTools::get_authoritys(rsp) {
+    } else if let Some(authoritys) = dnsTools::get_authoritys(rsp) {
+        let mut new_msg = Message::default();
+        let authority_record = authoritys.first().unwrap();
+        let authority_name =
+            match authority_record.resource {
+                NS(ns) => ns,
+                _ => panic!("Couldn't find valid authority ns to redirect to")
+            };
 
+        new_msg.add_question(authority_name.as_str(), Type::A, Class::Internet);
+         new_msg.add_extension(Extension {
+            payload_size: 4096,
+            ..Default::default()
+        });
+
+        let authority_server_answer = resolve_message_query(new_msg)?;
+        let authority_server_ip = dnsTools::parse_answer_a(&authority_server_answer)?;
+
+        // Now that we have the authority server IP, we can repeat the lookup for DNS at the same
+        // authority level..
+        Ok((false, query_name_server(authority_server_ip, &new_msg)?))
     } else {
-
+        Err(DnsError::new(Rcode::NXDomain))
     }
 
 
