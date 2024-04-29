@@ -2,8 +2,9 @@ use rustdns::{Message, Rcode};
 use std::net::UdpSocket;
 use std::time::Duration;
 use crate::error::{Result, DnsError};
+use crate::dnsTools;
 
-pub fn check_format(msg : &Message) -> bool {
+pub fn check_format_query(msg : &Message) -> bool {
     if rustdns::QR::Query != msg.qr || msg.questions.len() == 0 {
         false
     } else {
@@ -20,7 +21,7 @@ pub fn dispatch_query(msg : Message) -> Result<Message> {
 }
 
 pub fn resolve_message_query(msg : Message) -> Result<Message> {
-    if !check_format(&msg) {
+    if !check_format_query(&msg) {
         Err(DnsError::new(Rcode::FormErr))
     } else {
        dispatch_query(msg)
@@ -63,6 +64,31 @@ pub fn recursive_resolution(mut msg: Message) -> Result<Message> {
    sock.send(&root_server_query)?;
 
    let mut resp = [0; EDNS_RECCOMENDED_OCTETS];
+   let resp_len = sock.recv(&mut resp)?;
+
+   let resp_msg = Message::from_slice(&resp[0..resp_len])?;
+}
+
+
+/// Processes a DNS query response and then sends the corresponding request to the next nameserver.
+/// Returns the response from the query to the next namesever.
+/// Checks to ensure that rsp is truly a DNS response, and conforms to other formatting concerns.
+/// If rsp contains an answer or the returned message from the next nameserver contains an answer, then the output boolean is set to true
+fn process_dns_response(rsp : &Message) -> Result<(bool, Message)> {
+    // Base case where response is an answer
+    if rustdns::QR::Response != rsp.qr {
+        return Err(DnsError::new(Rcode::FormErr))
+    }
+
+    if let Some(ans) = dnsTools::get_answer(rsp) {
+
+    } else if let Some(glue) = dnsTools::get_glue(rsp) {
+
+    } else if let Some(authority) = dnsTools::get_authoritys(rsp) {
+
+    } else {
+
+    }
 
 
 }
