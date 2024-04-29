@@ -1,6 +1,11 @@
 use rustdns::{Message, Record};
 
 
+pub fn has_answer(rsp: &Message) -> bool {
+    rsp.answers.len() > 0
+}
+
+
 pub fn get_answer(rsp : &Message) -> Option<&Vec<Record>> {
     if rsp.answers.len() > 0 {
         Some(&rsp.answers)
