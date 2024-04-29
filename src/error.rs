@@ -5,7 +5,8 @@ pub type Result<T> = std::result::Result<T, DnsError>;
 
 #[derive(Debug, Clone)]
 pub struct DnsError {
-    code : Rcode
+    code : Rcode,
+    info : String
 }
 
 impl fmt::Display for DnsError {
@@ -14,8 +15,19 @@ impl fmt::Display for DnsError {
     }
 }
 
+impl From<std::io::Error> for DnsError {
+    fn from(err: std::io::Error) -> Self {
+        DnsError::new(Rcode::ServFail).with_info(format!("DnsError -- {}", err))
+    }
+}
+
 impl DnsError {
     pub fn new(code : Rcode) -> Self {
-        Self { code}
+        Self { code, info : String::new()}
+    }
+
+    pub fn with_info(mut self, info : String) -> Self {
+        self.info = info;
+        self
     }
 }
