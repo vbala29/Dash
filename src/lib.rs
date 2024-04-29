@@ -2,4 +2,4 @@ pub mod resolver;
 
 pub mod error;
 
-pub mod dnsTools;
+pub mod dnstools;

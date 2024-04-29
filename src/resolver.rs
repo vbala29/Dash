@@ -1,18 +1,18 @@
-use rustdns::{Class, Extension, Message, Rcode, Resource::{A, NS}, Type};
-use std::net::{UdpSocket, Ipv4Addr};
+use crate::dnstools;
+use crate::error::{DnsError, Result};
+use rustdns::{
+    Class, Extension, Message, Rcode,
+    Resource::{A, NS},
+    Type,
+};
+use std::net::{Ipv4Addr, UdpSocket};
 use std::time::Duration;
-use crate::error::{Result, DnsError};
-use crate::dnsTools;
 
-pub fn check_format_query(msg : &Message) -> bool {
-    if rustdns::QR::Query != msg.qr || msg.questions.len() == 0 {
-        false
-    } else {
-        true
-    }
+pub fn check_format_query(msg: &Message) -> bool {
+    !(rustdns::QR::Query != msg.qr || msg.questions.is_empty())
 }
 
-pub fn dispatch_query(msg : Message) -> Result<Message> {
+pub fn dispatch_query(msg: Message) -> Result<Message> {
     if msg.rd {
         recursive_resolution(msg)
     } else {
@@ -21,11 +21,11 @@ pub fn dispatch_query(msg : Message) -> Result<Message> {
     }
 }
 
-pub fn resolve_message_query(msg : Message) -> Result<Message> {
+pub fn resolve_message_query(msg: Message) -> Result<Message> {
     if !check_format_query(&msg) {
         Err(DnsError::new(Rcode::FormErr))
     } else {
-       dispatch_query(msg)
+        dispatch_query(msg)
     }
 }
 
@@ -36,114 +36,129 @@ pub fn iterative_resolution(mut msg : Message) -> Result<Message> {
 */
 
 pub fn recursive_resolution(msg: Message) -> Result<Message> {
-   let root_server_ip = "198.41.0.4:53".parse::<Ipv4Addr>()?;
+    let root_server_ip = "198.41.0.4".parse::<Ipv4Addr>()?;
 
-   let ref curr_rsp = query_name_server(root_server_ip, &msg)?;
+    let mut curr_rsp = query_name_server(root_server_ip, &msg)?;
+    let mut ans_found = false;
 
-   loop {
-      let (ans_found, &new_rsp) = process_dns_response(curr_rsp)?;
-      curr_rsp = new_rsp;
-      if ans_found {
-          
-   }
- }
+    println!("Queried root server, {}", curr_rsp);
+    // TODO: make some sort of way to limit max iterations or loops on DNS queries
+    while !ans_found {
+        let (new_ans, new_rsp) = process_dns_response(&curr_rsp)?;
+        ans_found = new_ans;
+        curr_rsp = new_rsp;
+        println!("Next query, {}", curr_rsp);
+    }
 
-pub fn query_name_server(ip : Ipv4Addr, msg : &Message) -> Result<Message> {
- let sock =
-       match UdpSocket::bind("0.0.0.0:0") {
-           Ok(s) => s,
-           Err(_) => return Err (DnsError::new(Rcode::ServFail))
-       };
-   sock.set_read_timeout(Some(Duration::from_secs(5)));
-   match sock.connect(ip.to_string()) {
-       Err(_) => return Err(DnsError::new(Rcode::ServFail).with_info(format!("UDP Connection Error to Nameserver: {}", ip))),
-       Ok(_) => ()
-   }
-
-   let nameserver_query =
-       match msg.to_vec() {
-           Ok(q) => q,
-           Err(e)  =>  return Err(DnsError::new(Rcode::ServFail).with_info(format!("Error serializing nameserver query: {}", e)))
-       };
-
-   // Note from RFC 1035 2.3.4
-   // UDP messages    512 octets or less
-   // This is due to lower bound MTU of 576 bytes in RFC 791 Section 3.1
-   // However with EDNS(0), RFC 6891 says 4096 is a good starting point
-   const EDNS_RECCOMENDED_OCTETS : usize = 4096;
-   if nameserver_query.len() > EDNS_RECCOMENDED_OCTETS {
-       return Err(DnsError::new(Rcode::ServFail).with_info(
-               format!("DNS nameserver query length {} exceeds RFC 6891 reccomended length {}", nameserver_query.len(), EDNS_RECCOMENDED_OCTETS)));
-   }
-
-   sock.send(&nameserver_query)?;
-
-   let mut resp = [0; EDNS_RECCOMENDED_OCTETS];
-   let resp_len = sock.recv(&mut resp)?;
-
-   let resp_msg = Message::from_slice(&resp[0..resp_len])?;
-
-   Ok(resp_msg)
+    Ok(curr_rsp)
 }
 
+pub fn query_name_server(ip: Ipv4Addr, msg: &Message) -> Result<Message> {
+    println!("Querying ip nameserver {}", ip);
+    const DNS_PORT: &str = "53";
+
+    let sock = match UdpSocket::bind("0.0.0.0:0") {
+        Ok(s) => s,
+        Err(_) => return Err(DnsError::new(Rcode::ServFail)),
+    };
+    sock.set_read_timeout(Some(Duration::from_secs(5)))?;
+    let server_address = format!("{}:{}", ip, DNS_PORT);
+    if sock.connect(server_address).is_err() {
+        return Err(DnsError::new(Rcode::ServFail)
+            .with_info(format!("UDP Connection Error to Nameserver: {}", ip)));
+    }
+
+    let nameserver_query = match msg.to_vec() {
+        Ok(q) => q,
+        Err(e) => {
+            return Err(DnsError::new(Rcode::ServFail)
+                .with_info(format!("Error serializing nameserver query: {}", e)))
+        }
+    };
+
+    // Note from RFC 1035 2.3.4
+    // UDP messages    512 octets or less
+    // This is due to lower bound MTU of 576 bytes in RFC 791 Section 3.1
+    // However with EDNS(0), RFC 6891 says 4096 is a good starting point
+    const EDNS_RECCOMENDED_OCTETS: usize = 4096;
+    if nameserver_query.len() > EDNS_RECCOMENDED_OCTETS {
+        return Err(DnsError::new(Rcode::ServFail).with_info(format!(
+            "DNS nameserver query length {} exceeds RFC 6891 reccomended length {}",
+            nameserver_query.len(),
+            EDNS_RECCOMENDED_OCTETS
+        )));
+    }
+
+    sock.send(&nameserver_query)?;
+
+    let mut resp = [0; EDNS_RECCOMENDED_OCTETS];
+    let resp_len = sock.recv(&mut resp)?;
+
+    let resp_msg = Message::from_slice(&resp[0..resp_len])?;
+
+    Ok(resp_msg)
+}
 
 /// Processes a DNS query response and then sends the corresponding request to the next nameserver.
 /// Returns the response from the query to the next namesever.
 /// Checks to ensure that rsp is truly a DNS response, and conforms to other formatting concerns.
 /// If rsp contains an answer, then the output boolean is set to true
-fn process_dns_response(rsp : &Message) -> Result<(bool, Message)> {
+fn process_dns_response(rsp: &Message) -> Result<(bool, Message)> {
     // Base case where response is an answer
     if rustdns::QR::Response != rsp.qr {
-        return Err(DnsError::new(Rcode::FormErr))
+        return Err(DnsError::new(Rcode::FormErr));
     }
 
-    if dnsTools::has_answer(rsp) {
-       Ok((true, rsp.clone()))
-    } else if let Some(glue) = dnsTools::get_glue(rsp) {
+    if dnstools::has_answer(rsp) {
+        Ok((true, rsp.clone()))
+    } else if let Some(glue) = dnstools::get_glue(rsp) {
         let mut new_msg = Message::default();
 
         // TODO check the class and ttl for caching and thoroughness and check for only A records
         let glue_record = glue.first().unwrap();
-        let next_nameserver_ip =
-            match glue_record.resource {
-                A(a) => a,
-                _ => panic!("Couldn't find valid glue record")
-            };
+        let next_nameserver_ip = match &glue_record.resource {
+            A(a) => a,
+            _ => panic!("Couldn't find valid glue record"),
+        };
 
         // Note that from 4.1.2 of RFC 1035 there really should only be one question due to
         // ambiguities in rcode handling.
-        new_msg.questions = rsp.questions;
+        new_msg.questions = rsp.questions.clone();
         new_msg.add_extension(Extension {
             payload_size: 4096,
             ..Default::default()
         });
 
-        Ok((false, query_name_server(next_nameserver_ip, &new_msg)?))
-    } else if let Some(authoritys) = dnsTools::get_authoritys(rsp) {
+        Ok((false, query_name_server(*next_nameserver_ip, &new_msg)?))
+    } else if let Some(authoritys) = dnstools::get_authoritys(rsp) {
         let mut new_msg = Message::default();
         let authority_record = authoritys.first().unwrap();
-        let authority_name =
-            match authority_record.resource {
-                NS(ns) => ns,
-                _ => panic!("Couldn't find valid authority ns to redirect to")
-            };
+        let authority_name = match &authority_record.resource {
+            NS(ns) => ns,
+            _ => panic!("Couldn't find valid authority ns to redirect to"),
+        };
 
         new_msg.add_question(authority_name.as_str(), Type::A, Class::Internet);
-         new_msg.add_extension(Extension {
+        new_msg.add_extension(Extension {
             payload_size: 4096,
             ..Default::default()
         });
 
-        let authority_server_answer = resolve_message_query(new_msg)?;
-        let authority_server_ip = dnsTools::parse_answer_a(&authority_server_answer)?;
+        let authority_server_answer = resolve_message_query(new_msg.clone())?;
+        let authority_server_ip = dnstools::parse_answer_a(&authority_server_answer)?;
 
         // Now that we have the authority server IP, we can repeat the lookup for DNS at the same
-        // authority level..
+        // authority level.
+        new_msg = Message::default();
+        new_msg.questions = rsp.questions.clone();
+        new_msg.add_extension(Extension {
+            payload_size: 4096,
+            ..Default::default()
+        });
+
         Ok((false, query_name_server(authority_server_ip, &new_msg)?))
     } else {
-        Err(DnsError::new(Rcode::NXDomain))
+        Err(DnsError::new(Rcode::NXDomain)
+            .with_info("In resolve_message_query couldn't find next steps".to_string()))
     }
-
-
 }
-

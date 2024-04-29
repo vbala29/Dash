@@ -1,16 +1,16 @@
-use std::fmt;
 use rustdns::Rcode;
+use std::fmt;
 
 pub type Result<T> = std::result::Result<T, DnsError>;
 
 #[derive(Debug, Clone)]
 pub struct DnsError {
-    code : Rcode,
-    info : String
+    code: Rcode,
+    info: String,
 }
 
 impl fmt::Display for DnsError {
-    fn fmt(&self, f : &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "DNS Error. Code {}", self.code)
     }
 }
@@ -28,11 +28,14 @@ impl From<std::net::AddrParseError> for DnsError {
 }
 
 impl DnsError {
-    pub fn new(code : Rcode) -> Self {
-        Self { code, info : String::new()}
+    pub fn new(code: Rcode) -> Self {
+        Self {
+            code,
+            info: String::new(),
+        }
     }
 
-    pub fn with_info(mut self, info : String) -> Self {
+    pub fn with_info(mut self, info: String) -> Self {
         self.info = info;
         self
     }
