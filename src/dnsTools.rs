@@ -29,13 +29,13 @@ pub fn get_authoritys(rsp: &Message) -> Option<&Vec<Record>> {
     }
 }
 
-pub fn parse_answer_a(rsp: &Message) -> Result<std::net::Ipv4Addr> {
+pub fn parse_answer_a(rsp: &Message) -> Result<(&str, std::net::Ipv4Addr)> {
     if !has_answer(rsp) {
         Err(DnsError::new(Rcode::ServFail))
     } else {
         let answer = rsp.answers.first().unwrap();
         match answer.resource {
-            A(a) => Ok(a),
+            A(a) => Ok((answer.name.as_str(), a)),
             _ => Err(DnsError::new(Rcode::NXDomain)
                 .with_info("Error parsing answer of record type A".to_string())),
         }

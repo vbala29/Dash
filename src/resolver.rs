@@ -29,6 +29,18 @@ pub fn resolve_message_query(msg: Message) -> Result<Message> {
     }
 }
 
+fn print_query_response(rsp : &Message, ip : Ipv4Addr, name : Option<&str>) {
+    let name_formatted = name.unwrap_or("XXX.XXX.XXX");
+
+    println!(
+            "\n\
+            ----------------------QUERY START----------------------\n\
+            Querying: {} {}\n\n
+            {}",
+            name_formatted, ip, rsp
+        );
+}
+
 /*
 pub fn iterative_resolution(mut msg : Message) -> Result<Message> {
 
@@ -36,25 +48,23 @@ pub fn iterative_resolution(mut msg : Message) -> Result<Message> {
 */
 
 pub fn recursive_resolution(msg: Message) -> Result<Message> {
-    let root_server_ip = "198.41.0.4".parse::<Ipv4Addr>()?;
+    let root_server_ip : Ipv4Addr = "198.41.0.4".parse::<Ipv4Addr>()?;
+    const ROOT_SERVER_NAME : &str = "a.root-servers.net";
 
-    let mut curr_rsp = query_name_server(root_server_ip, &msg)?;
+    let mut curr_rsp = query_name_server(root_server_ip, ROOT_SERVER_NAME, &msg)?;
     let mut ans_found = false;
 
-    println!("Queried root server, {}", curr_rsp);
     // TODO: make some sort of way to limit max iterations or loops on DNS queries
     while !ans_found {
         let (new_ans, new_rsp) = process_dns_response(&curr_rsp)?;
         ans_found = new_ans;
         curr_rsp = new_rsp;
-        println!("Next query, {}", curr_rsp);
     }
 
     Ok(curr_rsp)
 }
 
-pub fn query_name_server(ip: Ipv4Addr, msg: &Message) -> Result<Message> {
-    println!("Querying ip nameserver {}", ip);
+pub fn query_name_server(ip: Ipv4Addr, name : &str, msg: &Message) -> Result<Message> {
     const DNS_PORT: &str = "53";
 
     let sock = match UdpSocket::bind("0.0.0.0:0") {
@@ -96,6 +106,8 @@ pub fn query_name_server(ip: Ipv4Addr, msg: &Message) -> Result<Message> {
 
     let resp_msg = Message::from_slice(&resp[0..resp_len])?;
 
+    print_query_response(&resp_msg, ip, Some(name));
+
     Ok(resp_msg)
 }
 
@@ -129,7 +141,7 @@ fn process_dns_response(rsp: &Message) -> Result<(bool, Message)> {
             ..Default::default()
         });
 
-        Ok((false, query_name_server(*next_nameserver_ip, &new_msg)?))
+        Ok((false, query_name_server(*next_nameserver_ip, glue_record.name.as_str(), &new_msg)?))
     } else if let Some(authoritys) = dnstools::get_authoritys(rsp) {
         let mut new_msg = Message::default();
         let authority_record = authoritys.first().unwrap();
@@ -145,7 +157,7 @@ fn process_dns_response(rsp: &Message) -> Result<(bool, Message)> {
         });
 
         let authority_server_answer = resolve_message_query(new_msg.clone())?;
-        let authority_server_ip = dnstools::parse_answer_a(&authority_server_answer)?;
+        let (authority_server_name, authority_server_ip) = dnstools::parse_answer_a(&authority_server_answer)?;
 
         // Now that we have the authority server IP, we can repeat the lookup for DNS at the same
         // authority level.
@@ -156,7 +168,7 @@ fn process_dns_response(rsp: &Message) -> Result<(bool, Message)> {
             ..Default::default()
         });
 
-        Ok((false, query_name_server(authority_server_ip, &new_msg)?))
+        Ok((false, query_name_server(authority_server_ip, authority_server_name, &new_msg)?))
     } else {
         Err(DnsError::new(Rcode::NXDomain)
             .with_info("In resolve_message_query couldn't find next steps".to_string()))
