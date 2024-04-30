@@ -1,5 +1,9 @@
 pub mod resolver;
 
-pub mod error;
+pub mod dnserror;
 
 pub mod dnstools;
+
+pub mod threadpool;
+
+pub mod threadpoolerror;

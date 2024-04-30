@@ -1,5 +1,5 @@
+use crate::dnserror::{DnsError, Result};
 use crate::dnstools;
-use crate::error::{DnsError, Result};
 use rustdns::{
     Class, Extension, Message, Rcode,
     Resource::{A, NS},
@@ -114,7 +114,7 @@ pub fn query_name_server(ip: Ipv4Addr, name: &str, msg: &Message) -> Result<Mess
 
     let resp_msg = Message::from_slice(&resp[0..resp_len])?;
 
-    print_query_response(&resp_msg, ip, Some(name), false);
+    print_query_response(&resp_msg, ip, Some(name), true);
 
     Ok(resp_msg)
 }
