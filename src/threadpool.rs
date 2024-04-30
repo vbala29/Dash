@@ -47,13 +47,13 @@ impl Worker {
                 match start.elapsed() {
                     Ok(t) => {
                         if t.as_secs() > COUNT_RESET_TIME_SECS {
-                            let statistics = statistics.lock().unwrap().get(&id).unwrap();
-                            statistics.number_of_jobs_serviced = Some(job_count);
+                            let mut statistics_info = statistics.lock().unwrap();
+                            statistics_info.get_mut(&id).unwrap().number_of_jobs_serviced = Some(job_count);
                             job_count = 0;
                             start = SystemTime::now();
                         }
                     }
-                    Err(e) => (),
+                    Err(_) => (),
                 }
 
                 job_count += 1;
@@ -139,12 +139,10 @@ impl ThreadPool {
     }
 
     pub fn submit_job(&self, job: Box<Job>) {
-        let boxed_job = Box::new(job);
-
         self.send_queue.send(job).unwrap();
     }
 
-    pub fn get_next_id(&mut self) -> usize {
+    fn get_next_id(&mut self) -> usize {
         let next_id = self.next_id;
         self.next_id += 1;
         next_id
@@ -156,8 +154,8 @@ impl ThreadPool {
         jobs_per_duration_upper_bound: usize,
     ) -> Result<i32> {
         let mut reallocation: i32 = 0;
-        let statistics = *self.worker_statistics.lock().unwrap();
-        for (_, s) in &statistics {
+        let mut statistics = self.worker_statistics.lock().unwrap();
+        for (_, s) in statistics.iter_mut() {
             if let Some(count) = s.number_of_jobs_serviced {
                 if count < jobs_per_duration_lower_bound {
                     reallocation -= 1;
@@ -166,6 +164,7 @@ impl ThreadPool {
                 }
             }
         }
+
         let new_pool_size = reallocation + (self.workers.len() as i32);
         if new_pool_size < (self.min_pool_size as i32) {
             reallocation = (self.min_pool_size as i32) - (self.workers.len() as i32);
@@ -187,8 +186,7 @@ impl ThreadPool {
                 }
             }
         } else if reallocation > 0 {
-            let rx_arc = self.rx_queue;
-            let worker_statistics_arc = self.worker_statistics;
+            drop(statistics);
             for _ in 0..(reallocation as usize) {
                 let new_id = self.get_next_id();
                 self.worker_statistics.lock().unwrap().insert(
@@ -200,8 +198,8 @@ impl ThreadPool {
 
                 self.workers.push(Worker::new(
                     new_id,
-                    Arc::clone(&rx_arc),
-                    Arc::clone(&worker_statistics_arc),
+                    Arc::clone(&self.rx_queue),
+                    Arc::clone(&self.worker_statistics),
                     self.max_exec_time,
                 ));
             }

@@ -21,6 +21,7 @@ impl From<std::io::Error> for DnsError {
     }
 }
 
+
 impl From<std::net::AddrParseError> for DnsError {
     fn from(err: std::net::AddrParseError) -> Self {
         DnsError::new(Rcode::ServFail).with_info(format!("DnsError -- {}", err))

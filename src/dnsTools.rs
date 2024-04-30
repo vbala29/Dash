@@ -1,4 +1,4 @@
-use crate::error::{DnsError, Result};
+use crate::dnserror::{DnsError, Result};
 use rustdns::{Message, Rcode, Record, Resource::A};
 
 pub fn has_answer(rsp: &Message) -> bool {
