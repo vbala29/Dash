@@ -18,6 +18,7 @@ impl ThreadPoolJob for DashJob {
     fn run_job(&self) {
         match resolve_message_query(&self.msg) {
             Ok(rsp) => {
+                println!("HEREEE");
                 let response_serialized = match rsp.to_vec() {
                     Ok(q) => q,
                     Err(_) => {
