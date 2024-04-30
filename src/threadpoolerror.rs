@@ -5,7 +5,7 @@ pub enum ThreadPoolErrorReason {
     Other(String),
     InvalidPoolSize,
     InvalidDynamicPoolBounds,
-    DynamicResizingError
+    DynamicResizingError,
 }
 
 #[derive(Debug, Clone)]

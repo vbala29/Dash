@@ -1,10 +1,10 @@
 use crate::threadpoolerror::{ThreadPoolError, ThreadPoolErrorReason};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
-use std::sync::atomic::{AtomicBool, Ordering};
 
 type Result<T> = std::result::Result<T, ThreadPoolError>;
 type Job = dyn ThreadPoolJob + Send + 'static;
@@ -20,7 +20,7 @@ pub struct Statistics {
 pub struct Worker {
     id: usize,
     thread: thread::JoinHandle<()>,
-    stop_execution: Arc<AtomicBool>
+    stop_execution: Arc<AtomicBool>,
 }
 
 impl Worker {
@@ -40,7 +40,7 @@ impl Worker {
 
             loop {
                 if cloned_bool.load(Ordering::SeqCst) {
-                   break;
+                    break;
                 }
 
                 let job = rx.lock().unwrap().recv().unwrap();
@@ -65,7 +65,11 @@ impl Worker {
             }
         });
 
-        Worker { id, thread, stop_execution : atomic_bool }
+        Worker {
+            id,
+            thread,
+            stop_execution: atomic_bool,
+        }
     }
 }
 
@@ -77,7 +81,8 @@ pub struct ThreadPool {
     min_pool_size: usize,
     max_pool_size: usize,
     max_exec_time: Duration,
-    rx_queue: Arc<Mutex<mpsc::Receiver<Box<Job>>>>
+    rx_queue: Arc<Mutex<mpsc::Receiver<Box<Job>>>>,
+    next_id: usize,
 }
 
 impl ThreadPool {
@@ -123,13 +128,14 @@ impl ThreadPool {
         }
 
         Ok(ThreadPool {
-            worker_statistics : worker_statistics_arc,
+            worker_statistics: worker_statistics_arc,
             workers,
             send_queue: tx,
             min_pool_size,
             max_pool_size,
             max_exec_time,
-            rx_queue : rx_arc
+            rx_queue: rx_arc,
+            next_id: pool_size,
         })
     }
 
@@ -139,17 +145,27 @@ impl ThreadPool {
         self.send_queue.send(job).unwrap();
     }
 
-    pub fn dynamic_resizing(&mut self, jobs_per_duration_lower_bound : usize, jobs_per_duration_upper_bound : usize) -> Result<i32> {
-        let mut reallocation : i32 = 0;
+    pub fn get_next_id(&mut self) -> usize {
+        let next_id = self.next_id;
+        self.next_id += 1;
+        next_id
+    }
+
+    pub fn dynamic_resizing(
+        &mut self,
+        jobs_per_duration_lower_bound: usize,
+        jobs_per_duration_upper_bound: usize,
+    ) -> Result<i32> {
+        let mut reallocation: i32 = 0;
         let statistics = *self.worker_statistics.lock().unwrap();
         for (_, s) in &statistics {
-           if let Some(count) = s.number_of_jobs_serviced {
-               if count < jobs_per_duration_lower_bound {
-                   reallocation -= 1;
-               } else if count > jobs_per_duration_upper_bound {
-                   reallocation += 1;
-               }
-           }
+            if let Some(count) = s.number_of_jobs_serviced {
+                if count < jobs_per_duration_lower_bound {
+                    reallocation -= 1;
+                } else if count > jobs_per_duration_upper_bound {
+                    reallocation += 1;
+                }
+            }
         }
 
         if reallocation < 0 {
@@ -158,15 +174,27 @@ impl ThreadPool {
                 let w = self.workers.get(i);
                 match w {
                     Some(worker) => worker.stop_execution.store(true, Ordering::SeqCst),
-                    None => return Err(ThreadPoolError::new(ThreadPoolErrorReason::DynamicResizingError))
+                    None => {
+                        return Err(ThreadPoolError::new(
+                            ThreadPoolErrorReason::DynamicResizingError,
+                        ))
+                    }
                 }
             }
         } else if reallocation > 0 {
             let rx_arc = self.rx_queue;
             let worker_statistics_arc = self.worker_statistics;
-            for i in 0..(reallocation as usize) {
+            for _ in 0..(reallocation as usize) {
+                let new_id = self.get_next_id();
+                self.worker_statistics.lock().unwrap().insert(
+                    new_id,
+                    Statistics {
+                        number_of_jobs_serviced: Some(0),
+                    },
+                );
+
                 self.workers.push(Worker::new(
-                    i,
+                    new_id,
                     Arc::clone(&rx_arc),
                     Arc::clone(&worker_statistics_arc),
                     self.max_exec_time,
@@ -175,6 +203,5 @@ impl ThreadPool {
         }
 
         Ok(reallocation)
-
     }
 }
