@@ -1,9 +1,9 @@
 use crate::threadpoolerror::{ThreadPoolError, ThreadPoolErrorReason};
 use std::collections::HashMap;
-use std::thread;
-use std::time::{Duration, SystemTime};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, SystemTime};
 
 type Result<T> = std::result::Result<T, ThreadPoolError>;
 type Job = dyn ThreadPoolJob + Send + 'static;
@@ -16,16 +16,18 @@ pub struct Statistics {
     number_of_jobs_serviced: usize,
 }
 
-pub struct Worker
-{
+pub struct Worker {
     id: usize,
     thread: thread::JoinHandle<()>,
 }
 
-impl Worker
-{
-    fn new (id: usize, rx: Arc<Mutex<mpsc::Receiver<Box<Job>>>>, statistics: Arc<Mutex<HashMap<usize, Statistics>>>) -> Worker {
-        const COUNT_RESET_TIME_SECS : u64 = 5;
+impl Worker {
+    fn new(
+        id: usize,
+        rx: Arc<Mutex<mpsc::Receiver<Box<Job>>>>,
+        statistics: Arc<Mutex<HashMap<usize, Statistics>>>,
+    ) -> Worker {
+        const COUNT_RESET_TIME_SECS: u64 = 5;
         let thread = thread::spawn(move || {
             let mut job_count = 0;
             let start = SystemTime::now();
@@ -44,7 +46,7 @@ impl Worker
                             job_count = 0;
                         }
                     }
-                    Err(e) => ()
+                    Err(e) => (),
                 }
 
                 job_count += 1;
@@ -56,8 +58,7 @@ impl Worker
     }
 }
 
-pub struct ThreadPool
-{
+pub struct ThreadPool {
     // Periodically reset statistics to 0, used to check for dynamic resizing of resources.
     worker_statistics: HashMap<usize, Statistics>,
     workers: Vec<Worker>,
@@ -67,19 +68,20 @@ pub struct ThreadPool
     max_exec_time: Duration,
 }
 
-impl ThreadPool
-{
+impl ThreadPool {
     pub fn new(
         pool_size: usize,
         min_pool_size: usize,
         max_pool_size: usize,
         max_exec_time: Duration,
     ) -> Result<ThreadPool> {
-        const MAX_POOL_SIZE : usize = 20480; // Configuration for my Mac found via sysctl kern.num_threads
+        const MAX_POOL_SIZE: usize = 20480; // Configuration for my Mac found via sysctl kern.num_threads
         if pool_size > MAX_POOL_SIZE {
-            return Err(ThreadPoolError::new(ThreadPoolErrorReason::InvalidPoolSize))
+            return Err(ThreadPoolError::new(ThreadPoolErrorReason::InvalidPoolSize));
         } else if max_pool_size > MAX_POOL_SIZE {
-            return Err(ThreadPoolError::new(ThreadPoolErrorReason::InvalidDynamicPoolBounds))
+            return Err(ThreadPoolError::new(
+                ThreadPoolErrorReason::InvalidDynamicPoolBounds,
+            ));
         }
         let (tx, rx) = mpsc::channel(); // Tokio MPSC
         let rx_arc = Arc::new(Mutex::new(rx));
@@ -88,7 +90,11 @@ impl ThreadPool
         let mut worker_statistics = HashMap::new();
         let worker_statistics_arc = Arc::new(Mutex::new(worker_statistics));
         for id in 0..pool_size {
-            workers.push(Worker::new(id, Arc::clone(&rx_arc), Arc::clone(&worker_statistics_arc)));
+            workers.push(Worker::new(
+                id,
+                Arc::clone(&rx_arc),
+                Arc::clone(&worker_statistics_arc),
+            ));
             worker_statistics.insert(
                 id,
                 Statistics {
@@ -107,10 +113,9 @@ impl ThreadPool
         })
     }
 
+    pub fn submit_job(&self, job: Box<Job>) {
+        let boxed_job = Box::new(job);
 
-    pub fn submit_job(&self, job : Box<Job>) {
-       let boxed_job = Box::new(job);
-
-       self.send_queue.send(job).unwrap();
+        self.send_queue.send(job).unwrap();
     }
 }

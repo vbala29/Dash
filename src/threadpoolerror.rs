@@ -13,7 +13,7 @@ pub struct ThreadPoolError {
 }
 
 impl ThreadPoolError {
-    pub fn new(reason : ThreadPoolErrorReason) -> ThreadPoolError  {
+    pub fn new(reason: ThreadPoolErrorReason) -> ThreadPoolError {
         ThreadPoolError { reason }
     }
 }
