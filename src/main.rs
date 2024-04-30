@@ -1,6 +1,6 @@
 use dash::resolver::resolve_message_query;
 use dash::threadpool::{ThreadPool, ThreadPoolJob};
-use rustdns::{Class, Extension, Message, Type, Rcode};
+use rustdns::Message;
 use std::time::Duration;
 use std::net::{UdpSocket, SocketAddr};
 use std::io::{Error, ErrorKind};
@@ -12,21 +12,21 @@ struct DashJob {
 
 impl ThreadPoolJob for DashJob {
     fn run_job(&self) {
-        match resolve_message_query(self.msg) {
+        match resolve_message_query(&self.msg) {
             Ok(rsp) => {
                  let response_serialized = match rsp.to_vec() {
                         Ok(q) => q,
-                        Err(e) => {
+                        Err(_) => {
                             // TODO error handling
                             panic!("Response error in serializing");
                         }
                     };
 
                  // Bind to any currently unassigned port for sending
-                 // // TODO error handling 
+                 // // TODO error handling
                  let socket_for_sending = UdpSocket::bind("0.0.0.0:0").unwrap();
                  // TODO error handling
-                 socket_for_sending.send_to(&response_serialized, &self.client).unwrap();
+                 socket_for_sending.send_to(&response_serialized, self.client).unwrap();
 
             }
             // TODO make this return some sort of response to client

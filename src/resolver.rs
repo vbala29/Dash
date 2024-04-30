@@ -12,7 +12,7 @@ pub fn check_format_query(msg: &Message) -> bool {
     !(rustdns::QR::Query != msg.qr || msg.questions.is_empty())
 }
 
-pub fn dispatch_query(msg: Message) -> Result<Message> {
+pub fn dispatch_query(msg: &Message) -> Result<Message> {
     if msg.rd {
         recursive_resolution(msg)
     } else {
@@ -21,8 +21,8 @@ pub fn dispatch_query(msg: Message) -> Result<Message> {
     }
 }
 
-pub fn resolve_message_query(msg: Message) -> Result<Message> {
-    if !check_format_query(&msg) {
+pub fn resolve_message_query(msg: &Message) -> Result<Message> {
+    if !check_format_query(msg) {
         Err(DnsError::new(Rcode::FormErr))
     } else {
         dispatch_query(msg)
@@ -55,11 +55,11 @@ pub fn iterative_resolution(mut msg : Message) -> Result<Message> {
 }
 */
 
-pub fn recursive_resolution(msg: Message) -> Result<Message> {
+pub fn recursive_resolution(msg: &Message) -> Result<Message> {
     let root_server_ip: Ipv4Addr = "198.41.0.4".parse::<Ipv4Addr>()?;
     const ROOT_SERVER_NAME: &str = "a.root-servers.net";
 
-    let mut curr_rsp = query_name_server(root_server_ip, ROOT_SERVER_NAME, &msg)?;
+    let mut curr_rsp = query_name_server(root_server_ip, ROOT_SERVER_NAME, msg)?;
     let mut ans_found = false;
 
     // TODO: make some sort of way to limit max iterations or loops on DNS queries
@@ -168,7 +168,7 @@ fn process_dns_response(rsp: &Message) -> Result<(bool, Message)> {
         });
 
         println!("Start of new lookup for authority {}", authority_name);
-        let authority_server_answer = resolve_message_query(new_msg.clone())?;
+        let authority_server_answer = resolve_message_query(&new_msg)?;
         let (authority_server_name, authority_server_ip) =
             dnstools::parse_answer_a(&authority_server_answer)?;
         println!("End of new lookup for authority {}", authority_name);
