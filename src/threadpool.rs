@@ -26,6 +26,7 @@ impl Worker {
         id: usize,
         rx: Arc<Mutex<mpsc::Receiver<Box<Job>>>>,
         statistics: Arc<Mutex<HashMap<usize, Statistics>>>,
+        max_exec_time: Duration
     ) -> Worker {
         const COUNT_RESET_TIME_SECS: u64 = 5;
         let thread = thread::spawn(move || {
@@ -50,7 +51,7 @@ impl Worker {
                 }
 
                 job_count += 1;
-                job.run_job();
+                tokio::time::timeout(max_exec_time, tokio::task::spawn_blocking(move || job.run_job()));
             }
         });
 
@@ -94,6 +95,7 @@ impl ThreadPool {
                 id,
                 Arc::clone(&rx_arc),
                 Arc::clone(&worker_statistics_arc),
+                max_exec_time
             ));
             worker_statistics.insert(
                 id,
@@ -118,4 +120,5 @@ impl ThreadPool {
 
         self.send_queue.send(job).unwrap();
     }
+
 }
