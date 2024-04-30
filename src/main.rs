@@ -1,43 +1,9 @@
-use dash::resolver::resolve_message_query;
-use dash::threadpool::{ThreadPool, ThreadPoolJob};
+use dash::threadpool::ThreadPool;
 use rustdns::Message;
 use std::io::{Error, ErrorKind};
-use std::net::{SocketAddr, UdpSocket};
+use std::net::UdpSocket;
 use std::time::Duration;
-
-struct DashJob {
-    msg: Message,
-    client: SocketAddr,
-}
-
-impl ThreadPoolJob for DashJob {
-    fn run_job(&self) {
-        match resolve_message_query(&self.msg) {
-            Ok(rsp) => {
-                let response_serialized = match rsp.to_vec() {
-                    Ok(q) => q,
-                    Err(_) => {
-                        // TODO error handling
-                        panic!("Response error in serializing");
-                    }
-                };
-
-                // Bind to any currently unassigned port for sending
-                // // TODO error handling
-                let socket_for_sending = UdpSocket::bind("0.0.0.0:0").unwrap();
-                // TODO error handling
-                socket_for_sending
-                    .send_to(&response_serialized, self.client)
-                    .unwrap();
-            }
-            // TODO make this return some sort of response to client
-            Err(dns_error) => println!(
-                "DNS Error {} for client {}, with request: {}",
-                dns_error, self.client, self.msg
-            ),
-        }
-    }
-}
+use dash::dashjob::DashJob;
 
 fn main() -> std::io::Result<()> {
     let tp = match ThreadPool::new(10, 5, 15, Duration::from_secs(5)) {
@@ -59,9 +25,6 @@ fn main() -> std::io::Result<()> {
 
         let dns_request = Message::from_slice(&receive_buffer[0..rec_bytes])?;
 
-        tp.submit_job(Box::new(DashJob {
-            msg: dns_request,
-            client,
-        }));
+        tp.submit_job(Box::new(DashJob::new(dns_request, client)));
     }
 }
