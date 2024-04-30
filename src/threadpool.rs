@@ -112,7 +112,7 @@ impl ThreadPool {
             worker_statistics.insert(
                 id,
                 Statistics {
-                    number_of_jobs_serviced: Some(0),
+                    number_of_jobs_serviced: None,
                 },
             );
         }
@@ -189,7 +189,7 @@ impl ThreadPool {
                 self.worker_statistics.lock().unwrap().insert(
                     new_id,
                     Statistics {
-                        number_of_jobs_serviced: Some(0),
+                        number_of_jobs_serviced: None,
                     },
                 );
 
