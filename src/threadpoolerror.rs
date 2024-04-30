@@ -9,12 +9,14 @@ pub enum ThreadPoolErrorReason {
 }
 
 impl std::fmt::Display for ThreadPoolErrorReason {
-    fn fmt(&self, f : &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ThreadPoolErrorReason::Other(s) => write!(f, "Other: {}", s),
             ThreadPoolErrorReason::InvalidPoolSize => write!(f, "InvalidPoolSize"),
-            ThreadPoolErrorReason::InvalidDynamicPoolBounds => write!(f, "InvalidDynamicPoolBounds"),
-            ThreadPoolErrorReason::DynamicResizingError => write!(f, "DynamicResizingError")
+            ThreadPoolErrorReason::InvalidDynamicPoolBounds => {
+                write!(f, "InvalidDynamicPoolBounds")
+            }
+            ThreadPoolErrorReason::DynamicResizingError => write!(f, "DynamicResizingError"),
         }
     }
 }
@@ -31,7 +33,7 @@ impl ThreadPoolError {
 }
 
 impl std::fmt::Display for ThreadPoolError {
-    fn fmt(&self, f : &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ThreadPoolError: {}", self.reason)
     }
 }

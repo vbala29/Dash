@@ -1,4 +1,4 @@
-use crate::threadpoolerror::{ThreadPoolError, ThreadPoolErrorReason, Result};
+use crate::threadpoolerror::{Result, ThreadPoolError, ThreadPoolErrorReason};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -16,6 +16,7 @@ struct Statistics {
     number_of_jobs_serviced: Option<usize>,
 }
 
+#[allow(dead_code)]
 struct Worker {
     id: usize,
     thread: thread::JoinHandle<()>,
@@ -27,7 +28,7 @@ impl Worker {
         id: usize,
         rx: Arc<Mutex<mpsc::Receiver<Box<Job>>>>,
         statistics: Arc<Mutex<HashMap<usize, Statistics>>>,
-        max_exec_time: Duration,
+        _max_exec_time: Duration,
     ) -> Worker {
         const COUNT_RESET_TIME_SECS: u64 = 60;
         let atomic_bool = Arc::new(AtomicBool::new(false));
@@ -44,23 +45,29 @@ impl Worker {
 
                 let job = rx.lock().unwrap().recv().unwrap();
 
-                match start.elapsed() {
-                    Ok(t) => {
-                        if t.as_secs() > COUNT_RESET_TIME_SECS {
-                            let mut statistics_info = statistics.lock().unwrap();
-                            statistics_info.get_mut(&id).unwrap().number_of_jobs_serviced = Some(job_count);
-                            job_count = 0;
-                            start = SystemTime::now();
-                        }
+                if let Ok(t) = start.elapsed() {
+                    if t.as_secs() > COUNT_RESET_TIME_SECS {
+                        let mut statistics_info = statistics.lock().unwrap();
+                        statistics_info
+                            .get_mut(&id)
+                            .unwrap()
+                            .number_of_jobs_serviced = Some(job_count);
+                        job_count = 0;
+                        start = SystemTime::now();
                     }
-                    Err(_) => (),
                 }
 
                 job_count += 1;
-                tokio::time::timeout(
+                /*
+                if let Err(_) = rt.block_on(tokio::time::timeout(
                     max_exec_time,
                     tokio::task::spawn_blocking(move || job.run_job()),
-                );
+                )){
+                    // Todo do something else here
+                    println!("Job did not finish executing within time limit");
+                }
+                */
+                job.run_job();
             }
         });
 
@@ -172,37 +179,41 @@ impl ThreadPool {
             reallocation = (self.max_pool_size as i32) - (self.workers.len() as i32);
         }
 
-        if reallocation < 0 {
-            let stop_execution_count = (reallocation * -1) as usize;
-            for i in 0..stop_execution_count {
-                let w = self.workers.get(i);
-                match w {
-                    Some(worker) => worker.stop_execution.store(true, Ordering::SeqCst),
-                    None => {
-                        return Err(ThreadPoolError::new(
-                            ThreadPoolErrorReason::DynamicResizingError,
-                        ))
+        match reallocation.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                let stop_execution_count = -reallocation as usize;
+                for i in 0..stop_execution_count {
+                    let w = self.workers.get(i);
+                    match w {
+                        Some(worker) => worker.stop_execution.store(true, Ordering::SeqCst),
+                        None => {
+                            return Err(ThreadPoolError::new(
+                                ThreadPoolErrorReason::DynamicResizingError,
+                            ))
+                        }
                     }
                 }
             }
-        } else if reallocation > 0 {
-            drop(statistics);
-            for _ in 0..(reallocation as usize) {
-                let new_id = self.get_next_id();
-                self.worker_statistics.lock().unwrap().insert(
-                    new_id,
-                    Statistics {
-                        number_of_jobs_serviced: None,
-                    },
-                );
+            std::cmp::Ordering::Greater => {
+                drop(statistics);
+                for _ in 0..(reallocation as usize) {
+                    let new_id = self.get_next_id();
+                    self.worker_statistics.lock().unwrap().insert(
+                        new_id,
+                        Statistics {
+                            number_of_jobs_serviced: None,
+                        },
+                    );
 
-                self.workers.push(Worker::new(
-                    new_id,
-                    Arc::clone(&self.rx_queue),
-                    Arc::clone(&self.worker_statistics),
-                    self.max_exec_time,
-                ));
+                    self.workers.push(Worker::new(
+                        new_id,
+                        Arc::clone(&self.rx_queue),
+                        Arc::clone(&self.worker_statistics),
+                        self.max_exec_time,
+                    ));
+                }
             }
+            _ => (),
         }
 
         Ok(reallocation)
