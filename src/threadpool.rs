@@ -139,7 +139,7 @@ impl ThreadPool {
         self.send_queue.send(job).unwrap();
     }
 
-    pub fn dynamic_resizing(&mut self, jobs_per_duration_lower_bound : usize, jobs_per_duration_upper_bound : usize) => Result<i32> {
+    pub fn dynamic_resizing(&mut self, jobs_per_duration_lower_bound : usize, jobs_per_duration_upper_bound : usize) -> Result<i32> {
         let mut reallocation : i32 = 0;
         let statistics = *self.worker_statistics.lock().unwrap();
         for (_, s) in &statistics {
@@ -162,10 +162,19 @@ impl ThreadPool {
                 }
             }
         } else if reallocation > 0 {
+            let rx_arc = self.rx_queue;
+            let worker_statistics_arc = self.worker_statistics;
             for i in 0..(reallocation as usize) {
-                
+                self.workers.push(Worker::new(
+                    i,
+                    Arc::clone(&rx_arc),
+                    Arc::clone(&worker_statistics_arc),
+                    self.max_exec_time,
+                ));
             }
         }
+
+        Ok(reallocation)
 
     }
 }
