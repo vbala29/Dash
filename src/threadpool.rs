@@ -1,4 +1,4 @@
-use crate::threadpoolerror::{ThreadPoolError, ThreadPoolErrorReason};
+use crate::threadpoolerror::{ThreadPoolError, ThreadPoolErrorReason, Result};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -6,18 +6,17 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-type Result<T> = std::result::Result<T, ThreadPoolError>;
 type Job = dyn ThreadPoolJob + Send + 'static;
 
 pub trait ThreadPoolJob {
     fn run_job(&self);
 }
 
-pub struct Statistics {
+struct Statistics {
     number_of_jobs_serviced: Option<usize>,
 }
 
-pub struct Worker {
+struct Worker {
     id: usize,
     thread: thread::JoinHandle<()>,
     stop_execution: Arc<AtomicBool>,
@@ -166,6 +165,12 @@ impl ThreadPool {
                     reallocation += 1;
                 }
             }
+        }
+        let new_pool_size = reallocation + (self.workers.len() as i32);
+        if new_pool_size < (self.min_pool_size as i32) {
+            reallocation = (self.min_pool_size as i32) - (self.workers.len() as i32);
+        } else if new_pool_size > (self.max_pool_size as i32) {
+            reallocation = (self.max_pool_size as i32) - (self.workers.len() as i32);
         }
 
         if reallocation < 0 {
