@@ -7,6 +7,7 @@ use rustdns::{
 };
 use std::net::{Ipv4Addr, UdpSocket};
 use std::time::Duration;
+use crate::lru_ttl_cache;
 
 pub fn check_format_query(msg: &Message) -> bool {
     !(rustdns::QR::Query != msg.qr || msg.questions.is_empty())
