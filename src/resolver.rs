@@ -114,7 +114,7 @@ pub fn query_name_server(ip: Ipv4Addr, name: &str, msg: &Message) -> Result<Mess
 
     let resp_msg = Message::from_slice(&resp[0..resp_len])?;
 
-    print_query_response(&resp_msg, ip, Some(name), true);
+    //print_query_response(&resp_msg, ip, Some(name), true);
 
     Ok(resp_msg)
 }
@@ -167,11 +167,11 @@ fn process_dns_response(rsp: &Message) -> Result<(bool, Message)> {
             ..Default::default()
         });
 
-        println!("Start of new lookup for authority {}", authority_name);
+        //println!("Start of new lookup for authority {}", authority_name);
         let authority_server_answer = resolve_message_query(&new_msg)?;
         let (authority_server_name, authority_server_ip) =
             dnstools::parse_answer_a(&authority_server_answer)?;
-        println!("End of new lookup for authority {}", authority_name);
+        //println!("End of new lookup for authority {}", authority_name);
 
         // Now that we have the authority server IP, we can repeat the lookup for DNS at the same
         // authority level.

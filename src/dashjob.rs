@@ -1,7 +1,8 @@
-use rustdns::Message;
-use crate::threadpool::ThreadPoolJob;
-use std::net::{SocketAddr, UdpSocket};
 use crate::resolver::resolve_message_query;
+use crate::threadpool::ThreadPoolJob;
+use rustdns::Message;
+use rustdns::Resource::{A, AAAA, CNAME, NS, PTR};
+use std::net::{SocketAddr, UdpSocket};
 
 pub struct DashJob {
     msg: Message,
@@ -9,7 +10,7 @@ pub struct DashJob {
 }
 
 impl DashJob {
-    pub fn new(msg : Message, client : SocketAddr) -> Self {
+    pub fn new(msg: Message, client: SocketAddr) -> Self {
         DashJob { msg, client }
     }
 }
@@ -18,21 +19,20 @@ impl ThreadPoolJob for DashJob {
     fn run_job(&self) {
         match resolve_message_query(&self.msg) {
             Ok(rsp) => {
-                println!("HEREEE");
-                let response_serialized = match rsp.to_vec() {
-                    Ok(q) => q,
-                    Err(_) => {
-                        // TODO error handling
-                        panic!("Response error in serializing");
-                    }
+                let answer_str = match &rsp.answers.first().unwrap().resource {
+                    A(a) => a.to_string(),
+                    AAAA(a) => a.to_string().to_string(),
+                    CNAME(c) => c.clone(),
+                    NS(ns) => ns.clone(),
+                    PTR(ptr) => ptr.clone(),
+                    _ => "Unhandled answer record resource type".to_string(),
                 };
-
                 // Bind to any currently unassigned port for sending
                 // // TODO error handling
                 let socket_for_sending = UdpSocket::bind("0.0.0.0:0").unwrap();
                 // TODO error handling
                 socket_for_sending
-                    .send_to(&response_serialized, self.client)
+                    .send_to(answer_str.as_bytes(), self.client)
                     .unwrap();
             }
             // TODO make this return some sort of response to client
