@@ -38,12 +38,17 @@ impl Worker {
             let mut job_count = 0;
             let mut start = SystemTime::now();
 
-            loop {
-                if cloned_bool.load(Ordering::SeqCst) {
-                    break;
-                }
-
-                let job = rx.lock().unwrap().recv().unwrap();
+            while !cloned_bool.load(Ordering::SeqCst) {
+                let job = match rx.lock().unwrap().recv() {
+                    Ok(j) => j,
+                    Err(_) => {
+                        if !cloned_bool.load(Ordering::SeqCst) {
+                            return;
+                        } else {
+                            continue;
+                        }
+                    }
+                };
                 println!("Worker {} received a job", id);
 
                 if let Ok(t) = start.elapsed() {
@@ -154,6 +159,12 @@ impl ThreadPool {
         let next_id = self.next_id;
         self.next_id += 1;
         next_id
+    }
+
+    pub fn shutdown(&self) {
+        for w in self.workers.iter() {
+            w.stop_execution.store(true, Ordering::SeqCst);
+        }
     }
 
     pub fn dynamic_resizing(

@@ -62,7 +62,6 @@ pub fn recursive_resolution(msg: &Message) -> Result<Message> {
     const ROOT_SERVER_NAME: &str = "a.root-servers.net";
 
     let mut curr_rsp = query_name_server(root_server_ip, ROOT_SERVER_NAME, msg)?;
-    println!("root server response: {}", curr_rsp);
     let mut ans_found = false;
 
     // TODO: make some sort of way to limit max iterations or loops on DNS queries
@@ -80,7 +79,7 @@ pub fn query_name_server(ip: Ipv4Addr, name: &str, msg: &Message) -> Result<Mess
 
     let sock = match UdpSocket::bind("0.0.0.0:0") {
         Ok(s) => s,
-        Err(_) =>return  Err(DnsError::new(Rcode::ServFail))
+        Err(_) => return Err(DnsError::new(Rcode::ServFail)),
     };
     sock.set_nonblocking(true)?;
     sock.set_read_timeout(Some(Duration::from_secs(5)))?;
@@ -101,7 +100,8 @@ pub fn query_name_server(ip: Ipv4Addr, name: &str, msg: &Message) -> Result<Mess
     // Note from RFC 1035 2.3.4
     // UDP messages    512 octets or less
     // This is due to lower bound MTU of 576 bytes in RFC 791 Section 3.1
-    // However with EDNS(0), RFC 6891 says 4096 is a good starting point
+    // However with EDNS(0), RFC 6891 says 4096 is a good starting point.
+    // Should probably use TCP for this but I want it to be fast!
     const EDNS_RECCOMENDED_OCTETS: usize = 4096;
     if nameserver_query.len() > EDNS_RECCOMENDED_OCTETS {
         return Err(DnsError::new(Rcode::ServFail).with_info(format!(
@@ -122,16 +122,19 @@ pub fn query_name_server(ip: Ipv4Addr, name: &str, msg: &Message) -> Result<Mess
             Ok(s) => s,
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                 std::thread::sleep(Duration::from_millis(20));
-                continue
+                continue;
             }
-            Err(e) => return Err(DnsError::new(Rcode::ServFail).with_info(format!("Issue at sock.recv in query_name_server: {}", e)))
+            Err(e) => {
+                return Err(DnsError::new(Rcode::ServFail)
+                    .with_info(format!("Issue at sock.recv in query_name_server: {}", e)))
+            }
         };
         break;
     }
 
     let resp_msg = Message::from_slice(&resp[0..resp_length])?;
 
-    //print_query_response(&resp_msg, ip, Some(name), true);
+    // print_query_response(&resp_msg, ip, Some(name), true);
 
     Ok(resp_msg)
 }
