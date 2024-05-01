@@ -37,7 +37,7 @@ impl ThreadPoolJob for DashJob {
             }
             // TODO make this return some sort of response to client
             Err(dns_error) => println!(
-                "DNS Error {} for client {}, with request: {}",
+                "{} for client {}, with request: {}",
                 dns_error, self.client, self.msg
             ),
         }

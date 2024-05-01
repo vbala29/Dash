@@ -31,7 +31,8 @@ pub fn get_authoritys(rsp: &Message) -> Option<&Vec<Record>> {
 
 pub fn parse_answer_a(rsp: &Message) -> Result<(&str, std::net::Ipv4Addr)> {
     if !has_answer(rsp) {
-        Err(DnsError::new(Rcode::ServFail))
+        Err(DnsError::new(Rcode::ServFail)
+            .with_info("Expected an answer but didn't get one".to_string()))
     } else {
         let answer = rsp.answers.first().unwrap();
         match answer.resource {

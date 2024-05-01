@@ -44,6 +44,7 @@ impl Worker {
                 }
 
                 let job = rx.lock().unwrap().recv().unwrap();
+                println!("Worker {} received a job", id);
 
                 if let Ok(t) = start.elapsed() {
                     if t.as_secs() > COUNT_RESET_TIME_SECS {

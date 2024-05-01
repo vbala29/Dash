@@ -17,7 +17,8 @@ pub fn dispatch_query(msg: &Message) -> Result<Message> {
         recursive_resolution(msg)
     } else {
         //iterative_resolution(msg)
-        Err(DnsError::new(Rcode::NXDomain))
+        Err(DnsError::new(Rcode::NotImp)
+            .with_info("Dash does not support iterative resolution as of yet".to_string()))
     }
 }
 
@@ -29,6 +30,7 @@ pub fn resolve_message_query(msg: &Message) -> Result<Message> {
     }
 }
 
+#[allow(dead_code)]
 fn print_query_response(rsp: &Message, ip: Ipv4Addr, name: Option<&str>, verbose: bool) {
     let name_formatted = name.unwrap_or("XXX.XXX.XXX");
     if verbose {
@@ -60,6 +62,7 @@ pub fn recursive_resolution(msg: &Message) -> Result<Message> {
     const ROOT_SERVER_NAME: &str = "a.root-servers.net";
 
     let mut curr_rsp = query_name_server(root_server_ip, ROOT_SERVER_NAME, msg)?;
+    println!("root server response: {}", curr_rsp);
     let mut ans_found = false;
 
     // TODO: make some sort of way to limit max iterations or loops on DNS queries
@@ -77,8 +80,9 @@ pub fn query_name_server(ip: Ipv4Addr, name: &str, msg: &Message) -> Result<Mess
 
     let sock = match UdpSocket::bind("0.0.0.0:0") {
         Ok(s) => s,
-        Err(_) => return Err(DnsError::new(Rcode::ServFail)),
+        Err(_) =>return  Err(DnsError::new(Rcode::ServFail))
     };
+    sock.set_nonblocking(true)?;
     sock.set_read_timeout(Some(Duration::from_secs(5)))?;
     let server_address = format!("{}:{}", ip, DNS_PORT);
     if sock.connect(server_address).is_err() {
@@ -110,9 +114,22 @@ pub fn query_name_server(ip: Ipv4Addr, name: &str, msg: &Message) -> Result<Mess
     sock.send(&nameserver_query)?;
 
     let mut resp = [0; EDNS_RECCOMENDED_OCTETS];
-    let resp_len = sock.recv(&mut resp)?;
+    let resp_length;
+    // Use non blocking socket to prevent OS error 35 EAGIN issues with recv from UDP socket.
+    // Sleep for 20ms if data not received. Avgerage DNS query latency = 20ms
+    loop {
+        resp_length = match sock.recv(&mut resp) {
+            Ok(s) => s,
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(20));
+                continue
+            }
+            Err(e) => return Err(DnsError::new(Rcode::ServFail).with_info(format!("Issue at sock.recv in query_name_server: {}", e)))
+        };
+        break;
+    }
 
-    let resp_msg = Message::from_slice(&resp[0..resp_len])?;
+    let resp_msg = Message::from_slice(&resp[0..resp_length])?;
 
     //print_query_response(&resp_msg, ip, Some(name), true);
 
