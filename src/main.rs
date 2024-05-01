@@ -22,9 +22,9 @@ fn main() -> std::io::Result<()> {
     ctrlc::set_handler(move || stop.store(true, Ordering::SeqCst))
         .expect("Error with control c logic");
 
-    for i in 0..10 {
+    for i in 0..30 {
         std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(i * 300));
+            std::thread::sleep(Duration::from_millis(i * 100));
             let mut msg = Message::default();
             msg.add_question("datatracker.ietf.org", Type::A, Class::Internet);
             msg.add_extension(Extension {

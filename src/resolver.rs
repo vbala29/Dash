@@ -117,11 +117,17 @@ pub fn query_name_server(ip: Ipv4Addr, name: &str, msg: &Message) -> Result<Mess
     let resp_length;
     // Use non blocking socket to prevent OS error 35 EAGIN issues with recv from UDP socket.
     // Sleep for 20ms if data not received. Avgerage DNS query latency = 20ms
+    let mut retry_count = 500; // Give a max of 52 for message to be received, just like Linux
+                               // Kernel
     loop {
         resp_length = match sock.recv(&mut resp) {
             Ok(s) => s,
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                if retry_count == 0 {
+                    return Err(DnsError::new(Rcode::ServFail).with_info("Request timed out".to_string()))
+                }
                 std::thread::sleep(Duration::from_millis(20));
+                retry_count -= 1;
                 continue;
             }
             Err(e) => {
