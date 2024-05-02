@@ -46,7 +46,10 @@ pub fn parse_answer_a(rsp: &Message) -> Result<(&str, std::net::Ipv4Addr)> {
 
 pub fn string_of_question(rsp: &Message) -> Result<String> {
     let question = rsp.questions.first().expect("No questions present");
-    Ok(format!("{} {} {}", question.name, question.r#type, question.class))
+    Ok(format!(
+        "{} {} {}",
+        question.name, question.r#type, question.class
+    ))
 }
 
 pub fn parse_ttl_from_answer(rsp: &Message) -> Result<Duration> {

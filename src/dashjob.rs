@@ -1,7 +1,7 @@
+use crate::dnstools::{parse_ttl_from_answer, string_of_question};
 use crate::lru_ttl_cache::Cache;
 use crate::resolver::resolve_message_query;
 use crate::threadpool::ThreadPoolJob;
-use crate::dnstools::{parse_ttl_from_answer, string_of_question};
 use rustdns::Message;
 use rustdns::Resource::{A, AAAA, CNAME, NS, PTR};
 use std::net::{SocketAddr, UdpSocket};
@@ -30,12 +30,16 @@ impl ThreadPoolJob for DashJob {
         let mut rsp = Message::default();
         let mut cache = self.cache.lock().unwrap();
         if let Some(cache_value) = cache.get(&question_stringified) {
-           rsp = cache_value;
+            rsp = cache_value;
         } else {
             match resolve_message_query(&self.msg) {
                 Ok(v) => {
                     rsp = v.clone();
-                    cache.add(question_stringified, v.clone(), SystemTime::now() + parse_ttl_from_answer(&v).unwrap());
+                    cache.add(
+                        question_stringified,
+                        v.clone(),
+                        SystemTime::now() + parse_ttl_from_answer(&v).unwrap(),
+                    );
                 }
                 // TODO make this return some sort of response to client
                 Err(dns_error) => {

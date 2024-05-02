@@ -6,16 +6,16 @@ use std::time::{Duration, SystemTime};
 type CacheEntryLinkOpt<K, V> = Option<Arc<Mutex<CacheEntry<K, V>>>>;
 type CacheEntryLink<K, V> = Arc<Mutex<CacheEntry<K, V>>>;
 
-struct CacheEntry<K, V> {
+pub struct CacheEntry<K, V> {
     key: K,
     value: V,
-    ttl: SystemTime,
+    pub ttl: SystemTime,
     prev: CacheEntryLinkOpt<K, V>,
     next: CacheEntryLinkOpt<K, V>,
 }
 
 pub struct Cache<K: Hash + Eq + Sized, V: Clone> {
-    cache_map: Arc<Mutex<HashMap<K, CacheEntryLink<K, V>>>>,
+    pub cache_map: Arc<Mutex<HashMap<K, CacheEntryLink<K, V>>>>,
     capacity: usize,
     list_head: CacheEntryLinkOpt<K, V>,
     list_tail: CacheEntryLinkOpt<K, V>,
@@ -28,37 +28,7 @@ where
 {
     pub fn new(capacity: usize) -> Self {
         let cache_map = Arc::new(Mutex::new(HashMap::<K, CacheEntryLink<K, V>>::new()));
-        let cache_map_clone = cache_map.clone();
 
-        // Cloudflare DNS only Entrerprise TTL standard is 30 seconds
-        // https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/
-        let duration = Arc::new(Mutex::new(Duration::from_secs(30)));
-        let duration_clone = duration.clone();
-/*
-        std::thread::spawn(move || {
-            let mut index = 0;
-            loop {
-                std::thread::sleep(*duration_clone.lock().unwrap());
-
-                let (start, end) = ((capacity / 10) * index, (capacity / 10) * (index + 1));
-                let mut keys_to_remove = Vec::new();
-                let map = cache_map_clone.lock().unwrap();
-                for (k, v) in map.iter().skip(start).take(end - start) {
-                    let ttl: SystemTime = v.lock().unwrap().ttl;
-                    if ttl > SystemTime::now() {
-                        keys_to_remove.push(k);
-                    }
-                }
-
-                let mut map = cache_map_clone.lock().unwrap();
-                for k in keys_to_remove {
-                    map.remove(k);
-                }
-
-                index = (index + 1) % 10;
-            }
-        });
-*/
         Cache {
             cache_map,
             capacity,
@@ -136,5 +106,38 @@ where
         }
 
         true
+    }
+
+    pub fn start_ttl_daemon(cache: Arc<Mutex<Cache<K, V>>>, cache_capacity: usize) {
+        // Cloudflare DNS only Entrerprise TTL standard is 30 seconds
+        // https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/
+        let duration = Arc::new(Mutex::new(Duration::from_secs(30)));
+        std::thread::spawn(move || {
+            let mut index = 0;
+            loop {
+                let (start, end) = (
+                    (cache_capacity / 10) * index,
+                    (cache_capacity / 10) * (index + 1),
+                );
+                let mut keys_to_remove = Vec::new();
+                let cache_unlocked = cache.lock().unwrap();
+                let map = cache_unlocked.cache_map.lock().unwrap();
+                for (k, v) in map.iter().skip(start).take(end - start) {
+                    let ttl: SystemTime = v.lock().unwrap().ttl;
+                    if ttl > SystemTime::now() {
+                        keys_to_remove.push(k);
+                    }
+                }
+
+                let mut map = cache_unlocked.cache_map.lock().unwrap();
+                for k in keys_to_remove {
+                    map.remove(k);
+                }
+
+                index = (index + 1) % 10;
+
+                std::thread::sleep(*duration.lock().unwrap());
+            }
+        });
     }
 }

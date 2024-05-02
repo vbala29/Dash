@@ -77,7 +77,9 @@ fn main() -> std::io::Result<()> {
         socket.set_nonblocking(true)?;
         println!("Started Dash DNS server on port 50051");
 
-        let cache = Arc::new(Mutex::new(Cache::<String, Message>::new(100)));
+        const CACHE_CAPACITY: usize = 100;
+        let cache = Arc::new(Mutex::new(Cache::<String, Message>::new(CACHE_CAPACITY)));
+        Cache::start_ttl_daemon(cache.clone(), CACHE_CAPACITY);
 
         let mut receive_buffer = [0; EDNS_RECCOMENDED_OCTETS];
         while !stop_copy.load(Ordering::SeqCst) {
