@@ -66,6 +66,10 @@ where K : Hash + Eq + Sized + Clone, V : Clone
             return false
         }
 
+        while self.cache_map.len() > self.capacity {
+           self.evict(self.list_tail.clone().unwrap().clone());
+        }
+
         let new_entry = Rc::new(RefCell::new(CacheEntry { key : k.clone(), value : v, prev : None, next : None, ttl}));
         self.cache_map.insert(k, new_entry.clone());
 
