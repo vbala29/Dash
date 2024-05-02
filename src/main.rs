@@ -7,7 +7,7 @@ use std::io::{Error, ErrorKind};
 use std::net::UdpSocket;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_BACKTRACE", "1");
@@ -25,7 +25,8 @@ fn main() -> std::io::Result<()> {
 
     for i in 0..30 {
         std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(i * 100));
+            // Sleep so the server has time to startup
+            std::thread::sleep(Duration::from_millis(100));
             let mut msg = Message::default();
             msg.add_question("datatracker.ietf.org", Type::A, Class::Internet);
             msg.add_extension(Extension {
@@ -67,7 +68,7 @@ fn main() -> std::io::Result<()> {
     }
 
     let handle = std::thread::spawn(move || -> std::io::Result<()> {
-        let tp = match ThreadPool::new(5, 0, 15, Duration::from_secs(5)) {
+        let tp = match ThreadPool::new(1, 0, 15, Duration::from_secs(5)) {
             Ok(tp) => tp,
             Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
         };

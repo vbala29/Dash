@@ -34,7 +34,7 @@ where
         // https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/
         let duration = Arc::new(Mutex::new(Duration::from_secs(30)));
         let duration_clone = duration.clone();
-
+/*
         std::thread::spawn(move || {
             let mut index = 0;
             loop {
@@ -58,7 +58,7 @@ where
                 index = (index + 1) % 10;
             }
         });
-
+*/
         Cache {
             cache_map,
             capacity,
@@ -105,6 +105,7 @@ where
 
     /// Returns true if an item was removed with key k, else returns false
     pub fn add(&mut self, k: K, v: V, ttl: SystemTime) -> bool {
+        println!("RUNNNING");
         if self.cache_map.lock().unwrap().contains_key(&k) {
             return false;
         }

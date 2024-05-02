@@ -27,14 +27,15 @@ impl DashJob {
 impl ThreadPoolJob for DashJob {
     fn run_job(&self) {
         let question_stringified = string_of_question(&self.msg).unwrap();
-        let rsp;
-        if let Some(cache_value) = self.cache.lock().unwrap().get(&question_stringified) {
-            rsp = cache_value;
+        let mut rsp = Message::default();
+        let mut cache = self.cache.lock().unwrap();
+        if let Some(cache_value) = cache.get(&question_stringified) {
+           rsp = cache_value;
         } else {
             match resolve_message_query(&self.msg) {
                 Ok(v) => {
                     rsp = v.clone();
-                    self.cache.lock().unwrap().add(question_stringified, v, SystemTime::now() + parse_ttl_from_answer(&self.msg).unwrap());
+                    cache.add(question_stringified, v.clone(), SystemTime::now() + parse_ttl_from_answer(&v).unwrap());
                 }
                 // TODO make this return some sort of response to client
                 Err(dns_error) => {
