@@ -75,7 +75,6 @@ where
 
     /// Returns true if an item was removed with key k, else returns false
     pub fn add(&mut self, k: K, v: V, ttl: SystemTime) -> bool {
-        println!("RUNNNING");
         if self.cache_map.lock().unwrap().contains_key(&k) {
             return false;
         }
@@ -111,32 +110,34 @@ where
     pub fn start_ttl_daemon(cache: Arc<Mutex<Cache<K, V>>>, cache_capacity: usize) {
         // Cloudflare DNS only Entrerprise TTL standard is 30 seconds
         // https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/
-        let duration = Arc::new(Mutex::new(Duration::from_secs(30)));
+        let duration = Arc::new(Mutex::new(Duration::from_secs(1)));
         std::thread::spawn(move || {
             let mut index = 0;
             loop {
+                std::thread::sleep(*duration.lock().unwrap());
                 let (start, end) = (
                     (cache_capacity / 10) * index,
                     (cache_capacity / 10) * (index + 1),
                 );
                 let mut keys_to_remove = Vec::new();
                 let cache_unlocked = cache.lock().unwrap();
-                let map = cache_unlocked.cache_map.lock().unwrap();
-                for (k, v) in map.iter().skip(start).take(end - start) {
-                    let ttl: SystemTime = v.lock().unwrap().ttl;
-                    if ttl > SystemTime::now() {
-                        keys_to_remove.push(k);
+
+                {
+                    let map = cache_unlocked.cache_map.lock().unwrap();
+                    for (k, v) in map.iter().skip(start).take(end - start) {
+                        let ttl: SystemTime = v.lock().unwrap().ttl;
+                        if ttl > SystemTime::now() {
+                            keys_to_remove.push(k.clone());
+                        }
                     }
                 }
 
                 let mut map = cache_unlocked.cache_map.lock().unwrap();
-                for k in keys_to_remove {
+                for k in &keys_to_remove {
                     map.remove(k);
                 }
 
                 index = (index + 1) % 10;
-
-                std::thread::sleep(*duration.lock().unwrap());
             }
         });
     }

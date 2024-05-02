@@ -46,7 +46,7 @@ fn main() -> std::io::Result<()> {
                 match sending_socket.recv(&mut resp) {
                     Ok(_) => (),
                     Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(Duration::from_millis(20));
+                        std::thread::sleep(Duration::from_millis(2020));
                         continue;
                     }
                     Err(e) => {

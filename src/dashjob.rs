@@ -27,7 +27,7 @@ impl DashJob {
 impl ThreadPoolJob for DashJob {
     fn run_job(&self) {
         let question_stringified = string_of_question(&self.msg).unwrap();
-        let mut rsp = Message::default();
+        let rsp;
         let mut cache = self.cache.lock().unwrap();
         if let Some(cache_value) = cache.get(&question_stringified) {
             rsp = cache_value;
