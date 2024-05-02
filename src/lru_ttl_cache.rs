@@ -44,8 +44,8 @@ where
                 let mut keys_to_remove = Vec::new();
                 let map = cache_map_clone.lock().unwrap();
                 for (k, v) in map.iter().skip(start).take(end - start) {
-                    let ttl : SystemTime = v.lock().unwrap().ttl;
-                    if ttl > SystemTime::now()  {
+                    let ttl: SystemTime = v.lock().unwrap().ttl;
+                    if ttl > SystemTime::now() {
                         keys_to_remove.push(k);
                     }
                 }
@@ -67,11 +67,11 @@ where
         }
     }
 
-    pub fn get(&self, k: K) -> Option<V> {
+    pub fn get(&self, k: &K) -> Option<V> {
         self.cache_map
             .lock()
             .unwrap()
-            .get(&k)
+            .get(k)
             .map(|entry_link| entry_link.lock().unwrap().value.clone())
     }
 
@@ -87,16 +87,23 @@ where
                 p.lock().unwrap().next = None;
                 self.list_tail = prev.clone();
 
-                self.cache_map.lock().unwrap().remove(&link.lock().unwrap().key);
+                self.cache_map
+                    .lock()
+                    .unwrap()
+                    .remove(&link.lock().unwrap().key);
             }
             (None, None) => {
                 self.list_head = None;
                 self.list_tail = None;
-                self.cache_map.lock().unwrap().remove(&link.lock().unwrap().key);
+                self.cache_map
+                    .lock()
+                    .unwrap()
+                    .remove(&link.lock().unwrap().key);
             }
         }
     }
 
+    /// Returns true if an item was removed with key k, else returns false
     pub fn add(&mut self, k: K, v: V, ttl: SystemTime) -> bool {
         if self.cache_map.lock().unwrap().contains_key(&k) {
             return false;

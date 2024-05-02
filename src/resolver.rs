@@ -1,6 +1,5 @@
 use crate::dnserror::{DnsError, Result};
 use crate::dnstools;
-use crate::lru_ttl_cache;
 use rustdns::{
     Class, Extension, Message, Rcode,
     Resource::{A, NS},

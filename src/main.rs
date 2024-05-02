@@ -1,12 +1,13 @@
 use dash::dashjob::DashJob;
 use dash::dnserror::DnsError;
+use dash::lru_ttl_cache::Cache;
 use dash::threadpool::ThreadPool;
 use rustdns::{Class, Extension, Message, Rcode, Type};
 use std::io::{Error, ErrorKind};
 use std::net::UdpSocket;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 
 fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_BACKTRACE", "1");
@@ -75,6 +76,8 @@ fn main() -> std::io::Result<()> {
         socket.set_nonblocking(true)?;
         println!("Started Dash DNS server on port 50051");
 
+        let cache = Arc::new(Mutex::new(Cache::<String, Message>::new(100)));
+
         let mut receive_buffer = [0; EDNS_RECCOMENDED_OCTETS];
         while !stop_copy.load(Ordering::SeqCst) {
             let (rec_bytes, client) = match socket.recv_from(&mut receive_buffer) {
@@ -87,7 +90,7 @@ fn main() -> std::io::Result<()> {
             };
             let dns_request = Message::from_slice(&receive_buffer[0..rec_bytes])?;
 
-            tp.submit_job(Box::new(DashJob::new(dns_request, client)));
+            tp.submit_job(Box::new(DashJob::new(dns_request, client, cache.clone())));
         }
         tp.shutdown();
         Ok(())

@@ -1,5 +1,6 @@
 use crate::dnserror::{DnsError, Result};
 use rustdns::{Message, Rcode, Record, Resource::A};
+use std::time::Duration;
 
 pub fn has_answer(rsp: &Message) -> bool {
     !rsp.answers.is_empty()
@@ -41,4 +42,13 @@ pub fn parse_answer_a(rsp: &Message) -> Result<(&str, std::net::Ipv4Addr)> {
                 .with_info("Error parsing answer of record type A".to_string())),
         }
     }
+}
+
+pub fn string_of_question(rsp: &Message) -> Result<String> {
+    let question = rsp.questions.first().expect("No questions present");
+    Ok(format!("{} {} {}", question.name, question.r#type, question.class))
+}
+
+pub fn parse_ttl_from_answer(rsp: &Message) -> Result<Duration> {
+    Ok(rsp.answers.first().expect("No answers available").ttl)
 }
