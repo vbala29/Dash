@@ -1,5 +1,6 @@
 use crate::dnserror::{DnsError, Result};
 use crate::dnstools;
+use crate::lru_ttl_cache;
 use rustdns::{
     Class, Extension, Message, Rcode,
     Resource::{A, NS},
@@ -7,7 +8,6 @@ use rustdns::{
 };
 use std::net::{Ipv4Addr, UdpSocket};
 use std::time::Duration;
-use crate::lru_ttl_cache;
 
 pub fn check_format_query(msg: &Message) -> bool {
     !(rustdns::QR::Query != msg.qr || msg.questions.is_empty())
@@ -125,7 +125,9 @@ pub fn query_name_server(ip: Ipv4Addr, name: &str, msg: &Message) -> Result<Mess
             Ok(s) => s,
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                 if retry_count == 0 {
-                    return Err(DnsError::new(Rcode::ServFail).with_info("Request timed out".to_string()))
+                    return Err(
+                        DnsError::new(Rcode::ServFail).with_info("Request timed out".to_string())
+                    );
                 }
                 std::thread::sleep(Duration::from_millis(20));
                 retry_count -= 1;
