@@ -45,9 +45,6 @@ fn main() -> std::io::Result<()> {
                         msg.add_question("savetibet.org", Type::A, Class::Internet);
                     }
 
-
-
-
                     msg.add_extension(Extension {
                         payload_size: 4096,
                         ..Default::default()
@@ -80,7 +77,12 @@ fn main() -> std::io::Result<()> {
                             }
                         }
                         let msg_received = String::from_utf8_lossy(&resp);
-                        println!("Received message: {}, {} ---- {}", i, msg_received, msg.questions.first().unwrap().name);
+                        println!(
+                            "Received message: {}, {} ---- {}",
+                            i,
+                            msg_received,
+                            msg.questions.first().unwrap().name
+                        );
                         return;
                     }
                 });
@@ -117,10 +119,10 @@ fn main() -> std::io::Result<()> {
             let dns_request = Message::from_slice(&receive_buffer[0..rec_bytes])?;
 
             tp.submit_job(Box::new(DashJob::new(dns_request, client, cache.clone())));
-            if i % 20 == 0{
+            if i % 20 == 0 {
                 match tp.dynamic_resizing(3, 6) {
                     Ok(c) => println!("Dynamic resizing with factor {}", c),
-                    Err(e) => println!("Error in dynamic resizing {}", e)
+                    Err(e) => println!("Error in dynamic resizing {}", e),
                 }
             }
             i += 1;
