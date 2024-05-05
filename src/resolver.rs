@@ -74,7 +74,7 @@ pub fn recursive_resolution(msg: &Message) -> Result<Message> {
     Ok(curr_rsp)
 }
 
-pub fn query_name_server(ip: Ipv4Addr, name: &str, msg: &Message) -> Result<Message> {
+pub fn query_name_server(ip: Ipv4Addr, _name: &str, msg: &Message) -> Result<Message> {
     const DNS_PORT: &str = "53";
 
     let sock = match UdpSocket::bind("0.0.0.0:0") {

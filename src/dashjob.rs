@@ -30,6 +30,7 @@ impl ThreadPoolJob for DashJob {
         let rsp;
         let mut cache = self.cache.lock().unwrap();
         if let Some(cache_value) = cache.get(&question_stringified) {
+            println!("Cache hit for {}", self.msg.questions.first().unwrap().name);
             rsp = cache_value;
         } else {
             match resolve_message_query(&self.msg) {
