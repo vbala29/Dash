@@ -23,69 +23,74 @@ fn main() -> std::io::Result<()> {
     ctrlc::set_handler(move || stop.store(true, Ordering::SeqCst))
         .expect("Error with control c logic");
 
-    for i in 0..30 {
-        std::thread::spawn(move || {
-            // Sleep so the server has time to startup
-            std::thread::sleep(Duration::from_millis(100));
-            let mut msg = Message::default();
-            #[allow(clippy::if_same_then_else)]
-            if i > 25 {
-                msg.add_question("datatracker.ietf.org", Type::A, Class::Internet);
-            } else if i > 20 {
-                msg.add_question("cis1905.org", Type::A, Class::Internet);
-            } else if i > 15 {
-                msg.add_question("seas.upenn.edu", Type::A, Class::Internet);
-            } else if i > 10 {
-                msg.add_question("nyartcc.org", Type::A, Class::Internet);
-            } else if i > 5 {
-                msg.add_question("nytimes.com", Type::A, Class::Internet);
-            } else if i >= 0 {
-                msg.add_question("savetibet.org", Type::A, Class::Internet);
-            }
-
-
-
-
-            msg.add_extension(Extension {
-                payload_size: 4096,
-                ..Default::default()
-            });
-
-            let sending_socket = UdpSocket::bind("0.0.0.0:0").unwrap();
-            sending_socket.set_nonblocking(true).unwrap();
-
-            sending_socket
-                .send_to(&msg.to_vec().unwrap(), "127.0.0.1:50051")
-                .unwrap();
-
-            let mut resp = [0; EDNS_RECCOMENDED_OCTETS];
-            loop {
-                match sending_socket.recv(&mut resp) {
-                    Ok(_) => (),
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(Duration::from_millis(2020));
-                        continue;
+    std::thread::spawn(move || {
+        loop {
+            for i in 0..30 {
+                std::thread::spawn(move || {
+                    // Sleep so the server has time to startup
+                    std::thread::sleep(Duration::from_millis(100));
+                    let mut msg = Message::default();
+                    #[allow(clippy::if_same_then_else)]
+                    if i > 25 {
+                        msg.add_question("datatracker.ietf.org", Type::A, Class::Internet);
+                    } else if i > 20 {
+                        msg.add_question("cis1905.org", Type::A, Class::Internet);
+                    } else if i > 15 {
+                        msg.add_question("seas.upenn.edu", Type::A, Class::Internet);
+                    } else if i > 10 {
+                        msg.add_question("nyartcc.org", Type::A, Class::Internet);
+                    } else if i > 5 {
+                        msg.add_question("nytimes.com", Type::A, Class::Internet);
+                    } else if i >= 0 {
+                        msg.add_question("savetibet.org", Type::A, Class::Internet);
                     }
-                    Err(e) => {
-                        println!(
-                            "{}",
-                            DnsError::new(Rcode::ServFail).with_info(format!(
-                                "Issue at sock.recv in query_name_server: {}",
-                                e
-                            ))
-                        );
+
+
+
+
+                    msg.add_extension(Extension {
+                        payload_size: 4096,
+                        ..Default::default()
+                    });
+
+                    let sending_socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+                    sending_socket.set_nonblocking(true).unwrap();
+
+                    sending_socket
+                        .send_to(&msg.to_vec().unwrap(), "127.0.0.1:50051")
+                        .unwrap();
+
+                    let mut resp = [0; EDNS_RECCOMENDED_OCTETS];
+                    loop {
+                        match sending_socket.recv(&mut resp) {
+                            Ok(_) => (),
+                            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                                std::thread::sleep(Duration::from_millis(2020));
+                                continue;
+                            }
+                            Err(e) => {
+                                println!(
+                                    "{}",
+                                    DnsError::new(Rcode::ServFail).with_info(format!(
+                                        "Issue at sock.recv in query_name_server: {}",
+                                        e
+                                    ))
+                                );
+                                return;
+                            }
+                        }
+                        let msg_received = String::from_utf8_lossy(&resp);
+                        println!("Received message: {}, {} ---- {}", i, msg_received, msg.questions.first().unwrap().name);
                         return;
                     }
-                }
-                let msg_received = String::from_utf8_lossy(&resp);
-                println!("Received message: {}, {} ---- {}", i, msg_received, msg.questions.first().unwrap().name);
-                return;
+                });
             }
-        });
-    }
+            std::thread::sleep(Duration::from_millis(5000));
+        }
+    });
 
     let handle = std::thread::spawn(move || -> std::io::Result<()> {
-        let tp = match ThreadPool::new(10, 5, 15, Duration::from_secs(5)) {
+        let mut tp = match ThreadPool::new(10, 5, 15, Duration::from_secs(5)) {
             Ok(tp) => tp,
             Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
         };
@@ -99,6 +104,7 @@ fn main() -> std::io::Result<()> {
         Cache::start_ttl_daemon(cache.clone(), CACHE_CAPACITY);
 
         let mut receive_buffer = [0; EDNS_RECCOMENDED_OCTETS];
+        let mut i = 0;
         while !stop_copy.load(Ordering::SeqCst) {
             let (rec_bytes, client) = match socket.recv_from(&mut receive_buffer) {
                 Ok(s) => s,
@@ -111,6 +117,13 @@ fn main() -> std::io::Result<()> {
             let dns_request = Message::from_slice(&receive_buffer[0..rec_bytes])?;
 
             tp.submit_job(Box::new(DashJob::new(dns_request, client, cache.clone())));
+            if i % 20 == 0{
+                match tp.dynamic_resizing(3, 6) {
+                    Ok(c) => println!("Dynamic resizing with factor {}", c),
+                    Err(e) => println!("Error in dynamic resizing {}", e)
+                }
+            }
+            i += 1;
         }
         tp.shutdown();
         Ok(())

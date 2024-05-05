@@ -30,7 +30,7 @@ impl Worker {
         statistics: Arc<Mutex<HashMap<usize, Statistics>>>,
         _max_exec_time: Duration,
     ) -> Worker {
-        const COUNT_RESET_TIME_SECS: u64 = 60;
+        const COUNT_RESET_TIME_SECS: u64 = 10;
         let atomic_bool = Arc::new(AtomicBool::new(false));
         let cloned_bool = Arc::clone(&atomic_bool);
 
